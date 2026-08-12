@@ -29,6 +29,10 @@ public class Foundation {
     @Column(name = "signature", nullable = false, length = 255)
     private String signature;
 
+    // ชื่อผู้มีอำนาจลงนาม (ใช้ในใบอนุโมทนาบัตร)
+    @Column(name = "signature_name", length = 255)
+    private String signatureName;
+
     @Column(name = "target_amount", nullable = false)
     private Double targetAmount;
 
@@ -38,7 +42,8 @@ public class Foundation {
     @Column(name = "verification_doc", nullable = false, length = 255)
     private String verificationDoc;
 
+    // อนุญาตให้เป็น null ได้ เพื่อรองรับการลบแบบ soft delete (ตัดความสัมพันธ์กับโรงพยาบาล)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "hospital_id", nullable = false)
+    @JoinColumn(name = "hospital_id")
     private Hospital hospital;
 }

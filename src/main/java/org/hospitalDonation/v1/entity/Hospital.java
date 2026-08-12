@@ -22,6 +22,7 @@ public class Hospital {
     private String logo;
     private String qrCode;
     private String signature;
+    private String signatureName; // ชื่อผู้มีอำนาจลงนาม (ใช้ในใบอนุโมทนาบัตร)
     private String verificationStatus;
     private String verificationDoc;
 

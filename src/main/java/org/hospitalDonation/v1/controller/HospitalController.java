@@ -132,6 +132,7 @@ public class HospitalController {
                 profileDTO.setLogo(hospital.getLogo());
                 profileDTO.setQrCode(hospital.getQrCode());
                 profileDTO.setSignature(hospital.getSignature());
+                profileDTO.setSignatureName(hospital.getSignatureName());
                 profileDTO.setVerificationDoc(hospital.getVerificationDoc());
             }
 

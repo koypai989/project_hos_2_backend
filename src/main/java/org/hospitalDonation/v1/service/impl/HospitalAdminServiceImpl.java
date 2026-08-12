@@ -75,6 +75,7 @@ public class HospitalAdminServiceImpl implements HospitalAdminService {
                 .logo(dto.getLogo())
                 .qrCode(dto.getQrCode())
                 .signature(dto.getSignature())
+                .signatureName(dto.getSignatureName())
                 .verificationStatus(dto.getVerificationStatus())
                 .verificationDoc(dto.getVerificationDoc())
                 .build();

@@ -16,6 +16,7 @@ public class CreateHospitalDTO {
     private String logo;
     private String qrCode;
     private String signature;
+    private String signatureName;
     private String verificationStatus;
     private String verificationDoc;
 }

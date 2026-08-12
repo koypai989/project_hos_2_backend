@@ -24,7 +24,26 @@ public class FileController {
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
             }
-            String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename().replaceAll("\\s+", "_");
+
+            // ทำความสะอาดชื่อไฟล์: อนุญาตเฉพาะ ASCII ที่ปลอดภัย เพื่อกันปัญหา encoding
+            // ของชื่อไฟล์ที่มีตัวอักษรไทย/Unicode (ซึ่งจะเพี้ยนตอนเซฟลงดิสก์ทำให้เสิร์ฟรูปไม่ได้)
+            String original = file.getOriginalFilename();
+            if (original == null) original = "file";
+
+            String ext = "";
+            int dot = original.lastIndexOf('.');
+            if (dot >= 0) {
+                ext = original.substring(dot).replaceAll("[^a-zA-Z0-9.]", "");
+                original = original.substring(0, dot);
+            }
+
+            String safeBase = original
+                    .replaceAll("[^a-zA-Z0-9._-]", "_") // แทนอักขระที่ไม่ปลอดภัยด้วย _
+                    .replaceAll("_+", "_")               // ยุบ _ ที่ติดกัน
+                    .replaceAll("^_|_$", "");            // ตัด _ หัว/ท้าย
+            if (safeBase.isEmpty()) safeBase = "file";
+
+            String fileName = System.currentTimeMillis() + "_" + safeBase + ext;
             Path filePath = uploadPath.resolve(fileName);
 
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);

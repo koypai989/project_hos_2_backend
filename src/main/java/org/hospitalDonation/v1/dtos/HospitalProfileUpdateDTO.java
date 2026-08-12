@@ -20,5 +20,6 @@ public class HospitalProfileUpdateDTO {
     private String logo;
     private String qrCode;
     private String signature;
+    private String signatureName;
     private String verificationDoc;
 }

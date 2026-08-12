@@ -32,6 +32,10 @@ public class Donation {
     @Column(name = "certificate_path", length = 255)
     private String certificatePath;
 
+    // เลขอ้างอิงธุรกรรมจากสลิป (จาก slip-c) ใช้กันการใช้สลิปซ้ำ
+    @Column(name = "ref_number", unique = true, length = 50)
+    private String refNumber;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "citizen_id", nullable = false)
     private Donator donator;

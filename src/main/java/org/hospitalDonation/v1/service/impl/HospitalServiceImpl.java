@@ -40,6 +40,7 @@ public class HospitalServiceImpl implements HospitalService {
                 .logo(dto.getLogo())
                 .qrCode(dto.getQrCode())
                 .signature(dto.getSignature())
+                .signatureName(dto.getSignatureName())
                 .verificationStatus(dto.getVerificationStatus())
                 .verificationDoc(dto.getVerificationDoc())
                 .build();
@@ -101,6 +102,7 @@ public class HospitalServiceImpl implements HospitalService {
         if (dto.getLogo() != null) hospital.setLogo(dto.getLogo());
         if (dto.getQrCode() != null) hospital.setQrCode(dto.getQrCode());
         if (dto.getSignature() != null) hospital.setSignature(dto.getSignature());
+        if (dto.getSignatureName() != null) hospital.setSignatureName(dto.getSignatureName());
         if (dto.getVerificationDoc() != null) hospital.setVerificationDoc(dto.getVerificationDoc());
 
         hospitalRepository.save(hospital);
