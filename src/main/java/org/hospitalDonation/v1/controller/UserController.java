@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.hospitalDonation.dtos.ResponseObject;
 import org.hospitalDonation.v1.dtos.CreateUserDTO;
 import org.hospitalDonation.v1.dtos.LoginUserDTO;
+import org.hospitalDonation.v1.dtos.UpdateUserDTO;
+import org.hospitalDonation.v1.dtos.UserResponseDTO;
 import org.hospitalDonation.v1.entity.User;
 import org.hospitalDonation.v1.service.UserService;
 import org.springframework.http.HttpStatus;
@@ -22,7 +24,8 @@ public class UserController {
     @GetMapping
     public ResponseEntity<ResponseObject> getAllUsers(){
         try{
-            List<User> users = userService.getAllUser();
+            List<UserResponseDTO> users = userService.getAllUser()
+                    .stream().map(UserResponseDTO::from).toList();
             return new ResponseEntity<>(new ResponseObject(true,"Get all user successfully",users), HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(new ResponseObject(false,"Failed to get all user",null), HttpStatus.INTERNAL_SERVER_ERROR);
@@ -31,13 +34,26 @@ public class UserController {
     @GetMapping("/{id}")
     public ResponseEntity<ResponseObject> getSaleHistoryById (@PathVariable Integer id) {
         try {
-            User User = userService.getUserById(id);
-            return new ResponseEntity<>(new ResponseObject(true, "Get User by id successfully.", User), HttpStatus.OK);
+            User user = userService.getUserById(id);
+            return new ResponseEntity<>(new ResponseObject(true, "Get User by id successfully.", UserResponseDTO.from(user)), HttpStatus.OK);
         } catch (Exception e) {
             if (e instanceof NoSuchElementException) {
                 return new ResponseEntity<>(new ResponseObject(false, "Cannot found User by provided id.", null), HttpStatus.NOT_FOUND);
             }
             return new ResponseEntity<>(new ResponseObject(false, "Failed to get User by id", null), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ResponseObject> updateUser(@PathVariable Integer id, @RequestBody UpdateUserDTO dto) {
+        try {
+            userService.updateUser(id, dto);
+            return new ResponseEntity<>(new ResponseObject(true, "Update user successfully.", null), HttpStatus.OK);
+        } catch (Exception e) {
+            if (e instanceof NoSuchElementException) {
+                return new ResponseEntity<>(new ResponseObject(false, "Cannot found User by provided id.", null), HttpStatus.NOT_FOUND);
+            }
+            return new ResponseEntity<>(new ResponseObject(false, "Failed to update user: " + e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

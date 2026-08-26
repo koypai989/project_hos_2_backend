@@ -105,7 +105,7 @@ public class HospitalController {
     @PostMapping("/reject/{id}")
     public ResponseEntity<ResponseObject> rejectHospitals(@PathVariable Integer id) {
         try {
-            hospitalService.approveHospitalById(id);
+            hospitalService.rejectHospitalById(id);
             return new ResponseEntity<>(new ResponseObject(true, "hospital reject successfully.", null), HttpStatus.OK);
         } catch (Exception e) {
             if (e instanceof NoSuchElementException) {

@@ -4,10 +4,12 @@ import org.hospitalDonation.v1.dtos.SlipData;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,18 +19,18 @@ import java.util.Map;
 public class SlipVerifyService {
 
     private static final String BASE_URL = "https://slip-c.oiio.download";
+    private static final int MAX_ATTEMPTS = 2; // ลองซ้ำ 1 ครั้งถ้าบริการภายนอกช้า/ไม่ตอบ
 
     private final ObjectMapper mapper; // ใช้ ObjectMapper ที่ Spring จัดการให้ (Jackson 3)
-    // slip-c อาจใช้เวลาถึง 25 วิ จึงตั้ง timeout เผื่อไว้
+    // slip-c อาจใช้เวลาถึง 25 วิ จึงตั้ง timeout เผื่อไว้มากกว่านั้น
     private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
+            .connectTimeout(Duration.ofSeconds(20))
             .build();
 
     public SlipVerifyService(ObjectMapper mapper) {
         this.mapper = mapper;
     }
 
-    @SuppressWarnings("unchecked")
     public SlipData verify(Double amount, String imgDataUri) throws Exception {
         // amount ใน path: ถ้าเป็นจำนวนเต็มส่งเป็น integer, ไม่งั้นส่งทศนิยม
         String amountPath = (amount == Math.rint(amount))
@@ -44,12 +46,38 @@ public class SlipVerifyService {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/api/slip/" + amountPath))
-                .timeout(Duration.ofSeconds(40))
+                .timeout(Duration.ofSeconds(45))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                return handleResponse(response);
+            } catch (HttpTimeoutException | java.net.ConnectException e) {
+                System.out.println("slip-c attempt " + attempt + " failed: " + e.getMessage());
+                if (attempt == MAX_ATTEMPTS) {
+                    throw new IllegalStateException(
+                            "บริการตรวจสอบสลิปตอบสนองช้าเกินไป กรุณาลองใหม่อีกครั้งในอีกสักครู่");
+                }
+                // รอสั้นๆ ก่อนลองซ้ำ
+                Thread.sleep(1000);
+            } catch (IOException e) {
+                System.out.println("slip-c attempt " + attempt + " connection error: " + e.getMessage());
+                if (attempt == MAX_ATTEMPTS) {
+                    throw new IllegalStateException(
+                            "ไม่สามารถเชื่อมต่อบริการตรวจสอบสลิปได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+                }
+                Thread.sleep(1000);
+            }
+        }
+        // ไม่ควรมาถึงตรงนี้ได้ (ลูปด้านบน return หรือ throw เสมอ)
+        throw new IllegalStateException("ตรวจสอบสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    }
+
+    @SuppressWarnings("unchecked")
+    private SlipData handleResponse(HttpResponse<String> response) throws Exception {
         int status = response.statusCode();
 
         if (status != 200) {
