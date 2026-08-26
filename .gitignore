@@ -42,3 +42,6 @@ build/
 ### PICTURE ###
 *.png
 *.jpg
+
+# ยกเว้นเทมเพลตใบอนุโมทนาบัตร ต้อง track ไว้ (ไม่ใช่รูปที่ผู้ใช้อัปโหลด/ระบบสร้างขึ้นเอง)
+!src/main/resources/certificate_template.png
