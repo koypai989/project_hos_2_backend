@@ -125,10 +125,12 @@ public class CertificateService {
     }
 
     private void drawCentered(Graphics2D g, String text, Font font, int width, int baselineY) {
+        // แปลงเลขอารบิกทั้งหมดเป็นเลขไทยก่อนวาด (ให้ทั้งใบเป็นเลขไทย)
+        final String thaiText = toThaiDigits(text);
         g.setFont(font);
         FontMetrics fm = g.getFontMetrics();
-        int x = (width - fm.stringWidth(text)) / 2;
-        g.drawString(text, x, baselineY);
+        int x = (width - fm.stringWidth(thaiText)) / 2;
+        g.drawString(thaiText, x, baselineY);
     }
 
     // เลือกฟอนต์ที่แสดงภาษาไทยได้
@@ -169,11 +171,18 @@ public class CertificateService {
         return toThaiDigits(day) + " " + THAI_MONTHS[month] + " " + toThaiDigits(yearBE);
     }
 
+    private static final char[] THAI_DIGITS = {'๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'};
+
     private String toThaiDigits(int n) {
-        char[] thai = {'๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'};
+        return toThaiDigits(String.valueOf(n));
+    }
+
+    // แปลงเฉพาะตัวเลข 0-9 เป็นเลขไทย อักขระอื่น (เช่น "," หรือตัวหนังสือ) คงไว้เหมือนเดิม
+    private String toThaiDigits(String s) {
+        if (s == null) return "";
         StringBuilder sb = new StringBuilder();
-        for (char c : String.valueOf(n).toCharArray()) {
-            sb.append(thai[c - '0']);
+        for (char c : s.toCharArray()) {
+            sb.append(c >= '0' && c <= '9' ? THAI_DIGITS[c - '0'] : c);
         }
         return sb.toString();
     }

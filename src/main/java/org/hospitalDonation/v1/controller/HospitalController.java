@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.hospitalDonation.dtos.ResponseObject;
 import org.hospitalDonation.v1.dtos.CreateHospitalDTO;
 import org.hospitalDonation.v1.dtos.HospitalProfileUpdateDTO;
+import org.hospitalDonation.v1.dtos.HospitalRequestDTO;
 import org.hospitalDonation.v1.entity.Hospital;
 import org.hospitalDonation.v1.entity.HospitalAdmin;
 import org.hospitalDonation.v1.service.HospitalService;
@@ -72,10 +73,22 @@ public class HospitalController {
     @GetMapping("/pendings")
     public ResponseEntity<ResponseObject> getPendingHospitals() {
         try {
-            List<Hospital> hospitals = hospitalService.getPendingHospitals();
+            // ส่งข้อมูลโรงพยาบาลทั้งหมด + ผู้ยื่นคำขอ ให้แอดมินพิจารณา
+            List<HospitalRequestDTO> hospitals = hospitalService.getPendingHospitalRequests();
             return new ResponseEntity<>(new ResponseObject(true, "Fetch hospital Pending successfully.", hospitals), HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(new ResponseObject(false, "Failed to fetch hospital requests: " + e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // แนะนำโรงพยาบาลที่ได้รับบริจาคน้อยที่สุด (สำหรับแสดงในหน้าหลัก)
+    @GetMapping("/suggested")
+    public ResponseEntity<ResponseObject> getSuggestedHospitals(@RequestParam(defaultValue = "5") int limit) {
+        try {
+            List<Hospital> hospitals = hospitalService.getSuggestedHospitals(limit);
+            return new ResponseEntity<>(new ResponseObject(true, "Get suggested hospitals successfully.", hospitals), HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(new ResponseObject(false, "Failed to get suggested hospitals: " + e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

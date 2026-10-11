@@ -10,9 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/v1/donations")
@@ -25,10 +23,9 @@ public class DonationController {
     public ResponseEntity<ResponseObject> saveDonation(@RequestBody CreateDonationDTO dto) {
         try {
             Donation donation = donationService.createDonation(dto);
-            // ไม่ส่ง entity กลับตรงๆ กัน lazy/ข้อมูล user รั่ว — ส่ง id + path ใบเซอร์
-            Map<String, Object> result = new HashMap<>();
-            result.put("donationId", donation.getDonationId());
-            result.put("certificatePath", donation.getCertificatePath());
+            // ไม่ส่ง entity กลับตรงๆ กัน lazy/ข้อมูล user รั่ว — ส่งข้อมูลการบริจาคแบบสรุป
+            // (ยอดเงิน/วันที่/เลขอ้างอิง/ปลายทาง/ใบเซอร์) ให้แอปแสดงผลในหน้าเดิมได้ทันที
+            DonationResponseDTO result = DonationResponseDTO.from(donation);
             return new ResponseEntity<>(new ResponseObject(true, "บันทึกการบริจาคสำเร็จ", result), HttpStatus.CREATED);
         } catch (IllegalStateException e) {
             // ตรวจสลิปไม่ผ่าน / ยอดไม่ตรง / สลิปซ้ำ → 400 พร้อมข้อความ

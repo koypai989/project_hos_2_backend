@@ -4,11 +4,13 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.hospitalDonation.v1.dtos.CreateHospitalDTO;
 import org.hospitalDonation.v1.dtos.HospitalProfileUpdateDTO;
+import org.hospitalDonation.v1.dtos.HospitalRequestDTO;
 import org.hospitalDonation.v1.entity.Hospital;
 import org.hospitalDonation.v1.entity.HospitalAdmin;
 import org.hospitalDonation.v1.repository.HospitalAdminRepository;
 import org.hospitalDonation.v1.repository.HospitalRepository;
 import org.hospitalDonation.v1.service.HospitalService;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
@@ -53,6 +55,16 @@ public class HospitalServiceImpl implements HospitalService {
         return hospitalRepository.findByVerificationStatusIn(targetStatuses);
     }
 
+    // คำขอที่รออนุมัติ + ข้อมูลผู้ยื่นคำขอ เพื่อให้แอดมินเห็นข้อมูลครบก่อนตัดสินใจ
+    @Override
+    public List<HospitalRequestDTO> getPendingHospitalRequests() {
+        return getPendingHospitals().stream()
+                .map(h -> HospitalRequestDTO.from(
+                        h,
+                        hospitalAdminRepository.findByHospital_HospitalId(h.getHospitalId()).orElse(null)))
+                .toList();
+    }
+
     @Override
     public List<Hospital> getApproveHospitals() {
         List<String> targetStatuses = Arrays.asList("APPROVED");
@@ -76,6 +88,13 @@ public class HospitalServiceImpl implements HospitalService {
     @Override
     public List<Hospital> searchApprovedHospitals(String keyword) {
         return hospitalRepository.findByHospitalNameContainingIgnoreCaseAndVerificationStatus(keyword, "APPROVED");
+    }
+
+    // แนะนำโรงพยาบาลที่ได้รับบริจาคน้อยที่สุด
+    @Override
+    public List<Hospital> getSuggestedHospitals(int limit) {
+        int size = limit <= 0 ? 5 : limit;
+        return hospitalRepository.findApprovedOrderByDonationCountAsc(PageRequest.of(0, size));
     }
 
     @Override

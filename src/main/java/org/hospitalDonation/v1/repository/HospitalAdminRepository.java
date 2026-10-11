@@ -7,4 +7,7 @@ import java.util.Optional;
 
 public interface HospitalAdminRepository extends JpaRepository<HospitalAdmin, Integer> {
     Optional<HospitalAdmin> findByUser_UserId(Integer userId);
+
+    // ใช้ดึงข้อมูลผู้ยื่นคำขอของโรงพยาบาลนั้นๆ (หน้าอนุมัติของแอดมิน)
+    Optional<HospitalAdmin> findByHospital_HospitalId(Integer hospitalId);
 }

@@ -31,11 +31,16 @@ public class SlipVerifyService {
         this.mapper = mapper;
     }
 
+    // amount = null → ไม่ต้องยืนยันยอด ให้ slip-c อ่านยอดจากสลิปมาให้เลย (POST /api/slip)
     public SlipData verify(Double amount, String imgDataUri) throws Exception {
-        // amount ใน path: ถ้าเป็นจำนวนเต็มส่งเป็น integer, ไม่งั้นส่งทศนิยม
-        String amountPath = (amount == Math.rint(amount))
-                ? String.valueOf(amount.longValue())
-                : amount.toString();
+        String endpoint = "/api/slip";
+        if (amount != null) {
+            // amount ใน path: ถ้าเป็นจำนวนเต็มส่งเป็น integer, ไม่งั้นส่งทศนิยม
+            String amountPath = (amount == Math.rint(amount))
+                    ? String.valueOf(amount.longValue())
+                    : amount.toString();
+            endpoint = "/api/slip/" + amountPath;
+        }
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("img", imgDataUri);
@@ -45,7 +50,7 @@ public class SlipVerifyService {
         String body = mapper.writeValueAsString(payload);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/api/slip/" + amountPath))
+                .uri(URI.create(BASE_URL + endpoint))
                 .timeout(Duration.ofSeconds(45))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -82,9 +87,13 @@ public class SlipVerifyService {
 
         if (status != 200) {
             String detail = extractError(response.body());
+            String slug = extractSlug(response.body());
+            if ("qr-not-found".equals(slug)) {
+                throw new IllegalStateException("ไม่พบ QR code ในรูปสลิป กรุณาแนบรูปสลิปที่ชัดเจนและเห็น QR ครบถ้วน");
+            }
             switch (status) {
                 case 422:
-                    throw new IllegalStateException("ยอดเงินในสลิปไม่ตรงหรือยืนยันไม่ได้ (" + detail + ")");
+                    throw new IllegalStateException("อ่านข้อมูลจากสลิปไม่ได้ (" + detail + ")");
                 case 404:
                     throw new IllegalStateException("ตรวจสอบสลิปไม่สำเร็จ ไม่พบข้อมูลสลิป (" + detail + ")");
                 case 400:
@@ -131,9 +140,20 @@ public class SlipVerifyService {
         try {
             Map<String, Object> node = mapper.readValue(body, Map.class);
             if (node.get("message") != null) return node.get("message").toString();
+            if (node.get("error") != null) return node.get("error").toString();
             if (node.get("slug") != null) return node.get("slug").toString();
         } catch (Exception ignored) {
         }
         return body == null ? "" : body;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractSlug(String body) {
+        try {
+            Map<String, Object> node = mapper.readValue(body, Map.class);
+            if (node.get("slug") != null) return node.get("slug").toString();
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }

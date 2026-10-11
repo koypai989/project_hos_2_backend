@@ -41,8 +41,8 @@ public class DonationServiceImpl implements DonationService {
 
     @Override
     public Donation createDonation(CreateDonationDTO dto) throws Exception {
-        // ตรวจ input เบื้องต้น
-        if (dto.getAmount() == null || dto.getAmount() <= 0) {
+        // ตรวจ input เบื้องต้น (amount ไม่บังคับ — อ่านจากสลิปให้เลย)
+        if (dto.getAmount() != null && dto.getAmount() <= 0) {
             throw new IllegalStateException("จำนวนเงินไม่ถูกต้อง");
         }
         if (dto.getSlipBase64() == null || dto.getSlipBase64().isEmpty()) {
@@ -55,13 +55,17 @@ public class DonationServiceImpl implements DonationService {
         Donator donator = donatorRepository.findById(dto.getCitizenId())
                 .orElseThrow(() -> new NoSuchElementException("ไม่พบข้อมูลผู้บริจาค"));
 
-        // 1. ตรวจสอบสลิปผ่าน slip-c (ยืนยันยอดเงินตรงกับที่ระบุ)
+        // 1. ตรวจสอบสลิปผ่าน slip-c (ถ้า dto.amount เป็น null = ให้ slip-c อ่านยอดจากสลิปมาให้)
         SlipData slip = slipVerifyService.verify(dto.getAmount(), dto.getSlipBase64());
 
-        // 2. เช็คยอดซ้ำอีกชั้น (slip-c ยืนยันผ่าน path แล้ว แต่กันพลาด)
-        if (slip.getAmount() != null && Math.abs(slip.getAmount() - dto.getAmount()) > 0.001) {
+        // 2. ยอดเงินที่ใช้จริง = ยอดในสลิป (ถ้าผู้ใช้ระบุมาด้วยต้องตรงกัน)
+        if (slip.getAmount() == null || slip.getAmount() <= 0) {
+            throw new IllegalStateException("อ่านยอดเงินจากสลิปไม่ได้ กรุณาแนบสลิปที่ชัดเจนอีกครั้ง");
+        }
+        if (dto.getAmount() != null && Math.abs(slip.getAmount() - dto.getAmount()) > 0.001) {
             throw new IllegalStateException("ยอดเงินในสลิปไม่ตรงกับที่ระบุ");
         }
+        final double amount = slip.getAmount();
 
         // 3. กันใช้สลิปซ้ำด้วยเลขอ้างอิง
         if (slip.getRef() != null && donationRepository.existsByRefNumber(slip.getRef())) {
@@ -101,11 +105,11 @@ public class DonationServiceImpl implements DonationService {
         String donorName = ((donator.getFirstName() == null ? "" : donator.getFirstName())
                 + " " + (donator.getLastName() == null ? "" : donator.getLastName())).trim();
         String certPath = certificateService.generate(
-                donorName, dto.getAmount(), orgName,
+                donorName, amount, orgName,
                 signatureName, signaturePath, isFoundation, donationDate);
 
         Donation donation = Donation.builder()
-                .amount(dto.getAmount())
+                .amount(amount)
                 .donationDate(donationDate)
                 .slipImagePath(slipPath)
                 .certificatePath(certPath)
