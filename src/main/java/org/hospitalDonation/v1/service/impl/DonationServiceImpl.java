@@ -55,7 +55,7 @@ public class DonationServiceImpl implements DonationService {
         Donator donator = donatorRepository.findById(dto.getCitizenId())
                 .orElseThrow(() -> new NoSuchElementException("ไม่พบข้อมูลผู้บริจาค"));
 
-        // 1. ตรวจสอบสลิปผ่าน slip-c (ถ้า dto.amount เป็น null = ให้ slip-c อ่านยอดจากสลิปมาให้)
+        // 1. ตรวจสอบสลิปภายในระบบ (QR + OCR) — dto.amount เป็น null ได้ ระบบอ่านยอดจากสลิปเอง
         SlipData slip = slipVerifyService.verify(dto.getAmount(), dto.getSlipBase64());
 
         // 2. ยอดเงินที่ใช้จริง = ยอดในสลิป (ถ้าผู้ใช้ระบุมาด้วยต้องตรงกัน)
