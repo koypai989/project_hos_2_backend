@@ -194,6 +194,19 @@ public final class SlipTextParser {
 
     // ---------- ผู้โอน / ผู้รับ ----------
 
+    // เลขบัญชีปิดบางส่วน: Tesseract มักอ่าน x ตัวที่ติดกับตัวเลขเบิ้ลเป็น 2 ตัว (x9422 → xX9422)
+    // ถ้าจำนวนตัวอักษรที่ OCR ได้ มากกว่าจำนวนตัวอักษรที่นับได้จริงจากพิกเซล 1–2 ตัว
+    // → ตัด x ส่วนเกินออกจากกลุ่ม x ที่อยู่หน้าตัวเลข (ไม่แน่ใจกรณีอื่น ปล่อยตามเดิม)
+    static String reconcileMaskedAccount(String text, int glyphCount) {
+        if (findMaskedAccount(text) == null) return text;
+        int extra = text.replace(" ", "").length() - glyphCount;
+        if (extra < 1 || extra > 2) return text;
+        Matcher m = Pattern.compile("[xX*•]+(?=\\d)").matcher(text);
+        if (!m.find() || m.group().length() <= extra) return text;
+        // ตัวที่เบิ้ลคือตัวที่ติดกับตัวเลข → ตัดจากท้ายกลุ่ม
+        return text.substring(0, m.end() - extra) + text.substring(m.end());
+    }
+
     private static String findMaskedAccount(String line) {
         Matcher m = MASKED_ACCOUNT.matcher(line);
         while (m.find()) {

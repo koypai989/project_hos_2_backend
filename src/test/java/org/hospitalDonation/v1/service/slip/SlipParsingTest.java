@@ -77,7 +77,7 @@ class SlipParsingTest {
                 new SlipTextParser.Line("“๑ THAILAND", 0.68),
                 new SlipTextParser.Line("Ny", 0.07),
                 new SlipTextParser.Line("ไทยพร้อมเป็นเจ้าภาพ", 0.62),
-                new SlipTextParser.Line("XXX-X-xX9422-x", 0.17),
+                new SlipTextParser.Line("XXX-X-x9422-x", 0.17), // หลังเทียบกับพิกเซลแล้ว (OCR ดิบ: XXX-X-xX9422-x)
                 new SlipTextParser.Line("การประชุบประจําปิสภา ค ูวําภาร", 0.67),
                 new SlipTextParser.Line("กองท ุบการเงิบระหว่างประเทศ", 0.58),
                 new SlipTextParser.Line("โรงพยาบาลนครพิงค์", 0.17),
@@ -93,9 +93,22 @@ class SlipParsingTest {
         assertEquals(1.00, r.amount());
         assertEquals("2026-10-11T05:58:00.000Z", r.dateIso());
         assertEquals("ด.ช. ชินกฤต พ", r.senderName());
-        assertEquals("xxx-x-xx9422-x", r.senderId());
+        assertEquals("xxx-x-x9422-x", r.senderId());
         assertEquals("โรงพยาบาลนครพิงค์", r.receiverName());
         assertEquals("xxxxxxxxx6144", r.receiverId());
+    }
+
+    @Test
+    void removesDuplicatedMaskBeforeDigitsUsingPixelGlyphCount() {
+        // OCR อ่าน x9422 เป็น xX9422 (14 ตัว) แต่ในรูปนับได้จริง 13 ตัว
+        assertEquals("XXX-X-x9422-x", SlipTextParser.reconcileMaskedAccount("XXX-X-xX9422-x", 13));
+        // จำนวนตรงกับรูปอยู่แล้ว → ไม่แก้
+        assertEquals("XXXXXXXXX6144", SlipTextParser.reconcileMaskedAccount("XXXXXXXXX6144", 13));
+        // ต่างกันมากเกินไป (ไม่แน่ใจ) หรือ OCR ได้น้อยกว่ารูป → ไม่เดา ปล่อยตามเดิม
+        assertEquals("XXX-X-xX9422-x", SlipTextParser.reconcileMaskedAccount("XXX-X-xX9422-x", 10));
+        assertEquals("XXX-X-x9422-x", SlipTextParser.reconcileMaskedAccount("XXX-X-x9422-x", 14));
+        // ไม่ใช่เลขบัญชีปิดบางส่วน → ไม่แตะ
+        assertEquals("0994000423012003", SlipTextParser.reconcileMaskedAccount("0994000423012003", 15));
     }
 
     @Test

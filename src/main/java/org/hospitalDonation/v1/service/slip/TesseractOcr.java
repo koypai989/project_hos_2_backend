@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 public class TesseractOcr {
 
     private static final long TIMEOUT_SECONDS = 30;
+    private static final int SCALE = 2; // ขยายรูปก่อน OCR
 
     private final String tesseractPath;
     private final String tessdataDir; // null = ใช้ tessdata ที่มากับตัวติดตั้ง
@@ -82,7 +83,7 @@ public class TesseractOcr {
                 String err = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
                 throw new SlipVerifyException(500, "ocr-failed", "อ่านข้อความจากสลิปไม่สำเร็จ (" + err.trim() + ")");
             }
-            return toLines(new String(out, StandardCharsets.UTF_8), prepared.getWidth());
+            return toLines(new String(out, StandardCharsets.UTF_8), image);
         } catch (IOException e) {
             throw new SlipVerifyException(500, "ocr-unavailable",
                     "ไม่พบโปรแกรม OCR บนเซิร์ฟเวอร์ (ตั้งค่า slip.ocr.tesseract-path)");
@@ -98,8 +99,8 @@ public class TesseractOcr {
 
     // ขยาย 2 เท่า + แปลงเป็นขาวดำ ช่วยให้ Tesseract อ่านตัวหนังสือเล็กบนสลิปได้แม่นขึ้น
     private BufferedImage preprocess(BufferedImage src) {
-        int w = src.getWidth() * 2;
-        int h = src.getHeight() * 2;
+        int w = src.getWidth() * SCALE;
+        int h = src.getHeight() * SCALE;
         BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
         Graphics2D g = out.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
@@ -110,10 +111,11 @@ public class TesseractOcr {
 
     private record Word(int left, int top, int width, int height, String text) {}
 
-    private record Segment(String text, int left, int bottom) {}
+    // ตำแหน่งเป็นพิกัดของรูปที่ขยายแล้ว (x SCALE)
+    private record Segment(String text, int left, int top, int right, int bottom, int baseline) {}
 
     // TSV: level page block par line word left top width height conf text
-    private List<SlipTextParser.Line> toLines(String tsv, int imageWidth) {
+    private List<SlipTextParser.Line> toLines(String tsv, BufferedImage original) {
         Map<String, List<Word>> lines = new LinkedHashMap<>();
         for (String row : tsv.split("\\R")) {
             String[] c = row.split("\t", -1);
@@ -146,10 +148,17 @@ public class TesseractOcr {
         }
 
         // Tesseract เรียงตาม "บล็อก" ไม่ใช่บนลงล่าง → เรียงใหม่ตามตำแหน่งแนวตั้ง
-        segments.sort(Comparator.comparingInt(Segment::bottom).thenComparingInt(Segment::left));
+        segments.sort(Comparator.comparingInt(Segment::baseline).thenComparingInt(Segment::left));
         List<SlipTextParser.Line> result = new ArrayList<>();
         for (Segment s : segments) {
-            result.add(new SlipTextParser.Line(s.text(), (double) s.left() / imageWidth));
+            String text = s.text();
+            // เลขบัญชีปิดบางส่วน: เทียบจำนวนตัวอักษรกับที่นับได้จริงจากพิกเซลของรูปต้นฉบับ
+            if (text.toLowerCase().contains("xx")) {
+                int glyphs = countGlyphs(original, s.left() / SCALE, s.top() / SCALE,
+                        (s.right() + SCALE - 1) / SCALE, (s.bottom() + SCALE - 1) / SCALE);
+                text = SlipTextParser.reconcileMaskedAccount(text, glyphs);
+            }
+            result.add(new SlipTextParser.Line(text, (double) s.left() / (original.getWidth() * SCALE)));
         }
         return result;
     }
@@ -164,8 +173,31 @@ public class TesseractOcr {
             text.append(w.text());
             prevRight = w.left() + w.width();
         }
-        int bottom = median(words.stream().mapToInt(w -> w.top() + w.height()).toArray());
-        return new Segment(text.toString(), words.get(0).left(), bottom);
+        int baseline = median(words.stream().mapToInt(w -> w.top() + w.height()).toArray());
+        int top = words.stream().mapToInt(Word::top).min().orElse(0);
+        int bottom = words.stream().mapToInt(w -> w.top() + w.height()).max().orElse(0);
+        return new Segment(text.toString(), words.get(0).left(), top, prevRight, bottom, baseline);
+    }
+
+    // นับตัวอักษรในกรอบจากพิกเซลจริง: ไล่คอลัมน์ซ้ายไปขวา ช่วงคอลัมน์ที่มีจุดเข้มติดกัน = 1 ตัว
+    static int countGlyphs(BufferedImage img, int x0, int y0, int x1, int y1) {
+        x0 = Math.max(0, x0);
+        y0 = Math.max(0, y0);
+        x1 = Math.min(img.getWidth(), x1);
+        y1 = Math.min(img.getHeight(), y1);
+        int count = 0;
+        boolean inGlyph = false;
+        for (int x = x0; x < x1; x++) {
+            boolean dark = false;
+            for (int y = y0; y < y1 && !dark; y++) {
+                int rgb = img.getRGB(x, y);
+                int lum = (((rgb >> 16) & 255) * 299 + ((rgb >> 8) & 255) * 587 + (rgb & 255) * 114) / 1000;
+                dark = lum < 140;
+            }
+            if (dark && !inGlyph) count++;
+            inGlyph = dark;
+        }
+        return count;
     }
 
     private static int median(int[] values) {
