@@ -58,8 +58,8 @@ public class SlipVerifyService {
         BufferedImage image = readImage(bytes);
         SlipQrReader.QrSlipInfo qr = SlipQrReader.read(image);
 
-        List<String> lines = ocr.readLines(image);
-        SlipTextParser.Result text = SlipTextParser.parse(lines, ocr.supportsThai());
+        List<SlipTextParser.Line> lines = ocr.readLines(image);
+        SlipTextParser.Result text = SlipTextParser.parseLines(lines, ocr.supportsThai());
         if (text.amount() == null || text.amount() <= 0) {
             throw new SlipVerifyException(422, "amount-not-found",
                     "อ่านยอดเงินจากสลิปไม่ได้ กรุณาแนบสลิปที่ชัดเจนอีกครั้ง");

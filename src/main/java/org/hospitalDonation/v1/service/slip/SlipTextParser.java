@@ -20,12 +20,20 @@ public final class SlipTextParser {
     public record Result(Double amount, String dateIso, String senderName, String senderId,
                          String receiverName, String receiverId, String receiverBank) {}
 
+    // บรรทัดจาก OCR (เรียงบนลงล่าง) + ตำแหน่งซ้ายสุดเป็นสัดส่วนของความกว้างรูป (0..1)
+    public record Line(String text, double left) {}
+
+    // ชื่อต้องอยู่คอลัมน์เดียวกับเลขบัญชี (เผื่อไอคอนธนาคารด้านซ้าย) — กันข้อความแบนเนอร์ด้านขวา
+    private static final double NAME_COLUMN_TOLERANCE = 0.12;
+
     private static final Pattern MONEY = Pattern.compile("(?<![\\d.,])(\\d{1,3}(?:,\\d{3})+|\\d+)\\.(\\d{2})(?![\\d])");
     // เลขบัญชีที่ถูกปิดบางส่วน เช่น xxx-x-x9422-x, XXXXXXXXX6144, ***-*-*1234-*
     private static final Pattern MASKED_ACCOUNT = Pattern.compile("[xX*•\\d][xX*•\\d-]{6,}");
-    // 11 ต.ค. 69 12:58 น. / 11 ต.ค. 2569 - 12:58 / 11 Oct 2026, 12:58
+    // 11 ต.ค. 69 12:58 น. / 11 ต. ค. 2569 - 12:58 / 11 Oct 2026, 12:58 (OCR อาจเว้นวรรคในชื่อเดือน)
     private static final Pattern DATE = Pattern.compile(
-            "(\\d{1,2})\\s*([ก-๙a-zA-Z.]{2,12})\\s*(\\d{2,4})\\s*[,\\-]?\\s*(?:เวลา\\s*)?(\\d{1,2})[:.](\\d{2})");
+            "(\\d{1,2})\\s*([ก-๙a-zA-Z][ก-๙a-zA-Z.\\s]{1,14}?)\\s*(\\d{2,4})\\s*[,\\-]?\\s*(?:เวลา\\s*)?(\\d{1,2})[:.](\\d{2})");
+
+    private static final Pattern TIME = Pattern.compile("\\d{1,2}:\\d{2}");
 
     private static final Map<String, Integer> MONTHS = new LinkedHashMap<>();
     static {
@@ -69,11 +77,20 @@ public final class SlipTextParser {
 
     private SlipTextParser() {}
 
+    // ใช้กับข้อความล้วน (ไม่รู้ตำแหน่ง) — ถือว่าทุกบรรทัดชิดซ้าย
     public static Result parse(List<String> rawLines, boolean thaiAvailable) {
+        return parseLines(rawLines.stream().map(t -> new Line(t, 0)).toList(), thaiAvailable);
+    }
+
+    public static Result parseLines(List<Line> rawLines, boolean thaiAvailable) {
         List<String> lines = new ArrayList<>();
-        for (String l : rawLines) {
-            String n = normalize(l);
-            if (!n.isBlank()) lines.add(n);
+        List<Double> lefts = new ArrayList<>();
+        for (Line l : rawLines) {
+            String n = normalize(l.text());
+            if (!n.isBlank()) {
+                lines.add(n);
+                lefts.add(l.left());
+            }
         }
 
         Double amount = findAmount(lines);
@@ -102,9 +119,9 @@ public final class SlipTextParser {
         String receiverBank = null;
         // ชื่อภาษาไทยอ่านได้เฉพาะเมื่อมีข้อมูลภาษาไทยของ OCR — ไม่งั้นจะได้ตัวอักษรมั่ว ไม่ใช้ดีกว่า
         if (thaiAvailable && !accountLines.isEmpty()) {
-            senderName = findName(lines, dateLine + 1, accountLines.get(0));
+            senderName = findName(lines, lefts, dateLine + 1, accountLines.get(0));
             if (accountLines.size() > 1) {
-                receiverName = findName(lines, accountLines.get(0) + 1, accountLines.get(1));
+                receiverName = findName(lines, lefts, accountLines.get(0) + 1, accountLines.get(1));
                 receiverBank = findBank(lines, accountLines.get(0) + 1, accountLines.get(1));
             }
         }
@@ -154,7 +171,7 @@ public final class SlipTextParser {
     private static String parseDate(String line) {
         Matcher m = DATE.matcher(line);
         while (m.find()) {
-            Integer month = MONTHS.get(m.group(2).replace(".", "").toLowerCase());
+            Integer month = MONTHS.get(m.group(2).replaceAll("[.\\s]", "").toLowerCase());
             if (month == null) continue;
             int day = Integer.parseInt(m.group(1));
             int year = Integer.parseInt(m.group(3));
@@ -183,16 +200,20 @@ public final class SlipTextParser {
             String s = m.group();
             long masks = s.chars().filter(c -> c == 'x' || c == 'X' || c == '*' || c == '•').count();
             long digits = s.chars().filter(Character::isDigit).count();
-            if (masks >= 3 && digits >= 3) return s;
+            // OCR อ่าน x ปน X → ใช้ตัวเล็กทั้งหมดแบบ API เดิม (xxx-x-x1234-x)
+            if (masks >= 3 && digits >= 3) return s.replace('X', 'x');
         }
         return null;
     }
 
-    private static String findName(List<String> lines, int from, int to) {
+    // หาชื่อระหว่างบรรทัด from..to (to = บรรทัดเลขบัญชีของคนนั้น)
+    private static String findName(List<String> lines, List<Double> lefts, int from, int to) {
+        double accountLeft = lefts.get(to);
         for (int i = Math.max(from, 0); i < to; i++) {
             String l = lines.get(i);
+            if (lefts.get(i) > accountLeft + NAME_COLUMN_TOLERANCE) continue; // คนละคอลัมน์ (แบนเนอร์/โลโก้)
             if (isBankLine(l) || containsAny(l.toLowerCase(), HEADER_WORDS)) continue;
-            if (parseDate(l) != null) continue;
+            if (parseDate(l) != null || TIME.matcher(l).find()) continue; // บรรทัดวันเวลา ไม่ใช่ชื่อ
             String name = cleanName(l);
             if (name != null) return name;
         }
@@ -219,11 +240,11 @@ public final class SlipTextParser {
         return null;
     }
 
-    // ตัดเศษอักขระที่ OCR อ่านจากไอคอน/โลโก้หน้าชื่อ แล้วต้องมีตัวอักษรอย่างน้อย 2 ตัว
+    // ตัดเศษอักขระที่ OCR อ่านจากไอคอน/โลโก้หน้าชื่อ แล้วต้องมีตัวอักษรอย่างน้อย 3 ตัว
     private static String cleanName(String line) {
         String s = line.replaceAll("^[^ก-๙A-Za-z]+", "").replaceAll("[^ก-๙A-Za-z.)]+$", "").trim();
         long letters = s.chars().filter(Character::isLetter).count();
-        if (letters < 2) return null;
+        if (letters < 3) return null;
         // บรรทัดที่เป็นตัวเลขล้วน (เช่น เลขผู้รับชำระ) ไม่ใช่ชื่อ
         if (s.replaceAll("[\\s\\-]", "").matches("\\d+")) return null;
         return s;
@@ -237,7 +258,8 @@ public final class SlipTextParser {
             // เลขไทย ๐-๙ → 0-9
             b.append(c >= '๐' && c <= '๙' ? (char) ('0' + (c - '๐')) : c);
         }
-        return b.toString().trim();
+        // OCR มักอ่าน "ำ" เป็น นิคหิต+สระอา (ํา) เช่น "จํานวน" → รวมกลับเป็น "ำ"
+        return b.toString().replace("ํา", "ำ").trim();
     }
 
     private static boolean containsAny(String s, String[] words) {

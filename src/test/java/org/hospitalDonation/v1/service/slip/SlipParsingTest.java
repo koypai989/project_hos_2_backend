@@ -64,6 +64,41 @@ class SlipParsingTest {
     }
 
     @Test
+    void parsesRealKbankOcrOutputWithBannerColumn() {
+        // ผล OCR จริงของ bath1.jpg (tha+eng): แบนเนอร์ด้านขวาแทรกอยู่ระหว่างผู้โอนกับผู้รับ,
+        // ชื่อเดือนมีเว้นวรรค, "ำ" ถูกอ่านเป็น "ํา", มีโลโก้ปนหน้าชื่อ
+        List<SlipTextParser.Line> lines = List.of(
+                new SlipTextParser.Line("จ่ายบิลสําเร็จ", 0.17),
+                new SlipTextParser.Line("K+", 0.84),
+                new SlipTextParser.Line("9", 0.06),
+                new SlipTextParser.Line("11 ต. ค. 69 12:58 น.", 0.17),
+                new SlipTextParser.Line("6 ด.ช. ชินกฤต พ", 0.05),
+                new SlipTextParser.Line("ธ.กสิกรไทย", 0.17),
+                new SlipTextParser.Line("“๑ THAILAND", 0.68),
+                new SlipTextParser.Line("Ny", 0.07),
+                new SlipTextParser.Line("ไทยพร้อมเป็นเจ้าภาพ", 0.62),
+                new SlipTextParser.Line("XXX-X-xX9422-x", 0.17),
+                new SlipTextParser.Line("การประชุบประจําปิสภา ค ูวําภาร", 0.67),
+                new SlipTextParser.Line("กองท ุบการเงิบระหว่างประเทศ", 0.58),
+                new SlipTextParser.Line("โรงพยาบาลนครพิงค์", 0.17),
+                new SlipTextParser.Line("0994000423012003", 0.17),
+                new SlipTextParser.Line("XXXXXXXXX6144", 0.17),
+                new SlipTextParser.Line("จํานวน :", 0.05),
+                new SlipTextParser.Line("1.00 บาท", 0.53),
+                new SlipTextParser.Line("ค่าธรรมเนียม :", 0.06),
+                new SlipTextParser.Line("0.00 บาท", 0.56),
+                new SlipTextParser.Line("เลขที่รายการ:", 0.06),
+                new SlipTextParser.Line("016284125852BPM05043", 0.26));
+        SlipTextParser.Result r = SlipTextParser.parseLines(lines, true);
+        assertEquals(1.00, r.amount());
+        assertEquals("2026-10-11T05:58:00.000Z", r.dateIso());
+        assertEquals("ด.ช. ชินกฤต พ", r.senderName());
+        assertEquals("xxx-x-xx9422-x", r.senderId());
+        assertEquals("โรงพยาบาลนครพิงค์", r.receiverName());
+        assertEquals("xxxxxxxxx6144", r.receiverId());
+    }
+
+    @Test
     void parsesThaiDigitsAndFullYearAndThousands() {
         List<String> lines = List.of(
                 "โอนเงินสำเร็จ",

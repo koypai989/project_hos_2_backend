@@ -54,15 +54,19 @@ public class TesseractOcr {
         return languages.contains("tha");
     }
 
-    public List<String> readLines(BufferedImage image) {
+    // คืนบรรทัดเรียงจากบนลงล่าง พร้อมตำแหน่งซ้ายสุด (สัดส่วนของความกว้างรูป)
+    public List<SlipTextParser.Line> readLines(BufferedImage image) {
         Path input = null;
         try {
             input = Files.createTempFile("slip-ocr-", ".png");
-            ImageIO.write(preprocess(image), "png", input.toFile());
+            BufferedImage prepared = preprocess(image);
+            ImageIO.write(prepared, "png", input.toFile());
 
             List<String> cmd = new ArrayList<>(List.of(
                     tesseractPath, input.toString(), "stdout",
-                    "-l", languages, "--psm", "3", "tsv"));
+                    "-l", languages, "--psm", "3",
+                    // ขอผลแบบ TSV ผ่าน -c (ไม่พึ่งไฟล์ configs/tsv ที่อาจไม่มีในโฟลเดอร์ tessdata ของโปรเจกต์)
+                    "-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"));
             if (tessdataDir != null) {
                 cmd.add(3, "--tessdata-dir");
                 cmd.add(4, tessdataDir);
@@ -78,7 +82,7 @@ public class TesseractOcr {
                 String err = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
                 throw new SlipVerifyException(500, "ocr-failed", "อ่านข้อความจากสลิปไม่สำเร็จ (" + err.trim() + ")");
             }
-            return toLines(new String(out, StandardCharsets.UTF_8));
+            return toLines(new String(out, StandardCharsets.UTF_8), prepared.getWidth());
         } catch (IOException e) {
             throw new SlipVerifyException(500, "ocr-unavailable",
                     "ไม่พบโปรแกรม OCR บนเซิร์ฟเวอร์ (ตั้งค่า slip.ocr.tesseract-path)");
@@ -104,10 +108,12 @@ public class TesseractOcr {
         return out;
     }
 
-    private record Word(int left, int width, int height, String text) {}
+    private record Word(int left, int top, int width, int height, String text) {}
+
+    private record Segment(String text, int left, int bottom) {}
 
     // TSV: level page block par line word left top width height conf text
-    private List<String> toLines(String tsv) {
+    private List<SlipTextParser.Line> toLines(String tsv, int imageWidth) {
         Map<String, List<Word>> lines = new LinkedHashMap<>();
         for (String row : tsv.split("\\R")) {
             String[] c = row.split("\t", -1);
@@ -116,30 +122,57 @@ public class TesseractOcr {
             if (text.isEmpty()) continue;
             String key = c[2] + "-" + c[3] + "-" + c[4];
             lines.computeIfAbsent(key, k -> new ArrayList<>()).add(new Word(
-                    Integer.parseInt(c[6]), Integer.parseInt(c[8]), Integer.parseInt(c[9]), text));
+                    Integer.parseInt(c[6]), Integer.parseInt(c[7]),
+                    Integer.parseInt(c[8]), Integer.parseInt(c[9]), text));
         }
 
-        List<String> result = new ArrayList<>();
+        List<Segment> segments = new ArrayList<>();
         for (List<Word> words : lines.values()) {
             words.sort(Comparator.comparingInt(Word::left));
-            int lineHeight = words.stream().mapToInt(Word::height).max().orElse(20);
-            StringBuilder seg = new StringBuilder();
+            // ใช้ความสูง "กลางๆ" ของตัวอักษร (ไม่ใช่ค่าสูงสุด เพราะโลโก้/สระบนล่างสูงผิดปกติ)
+            int charHeight = median(words.stream().mapToInt(Word::height).toArray());
+            List<Word> seg = new ArrayList<>();
             int prevRight = -1;
             for (Word w : words) {
                 // ช่องว่างกว้างกว่า ~3 เท่าความสูงตัวอักษร = คนละคอลัมน์ → ตัดเป็นบรรทัดใหม่
-                if (prevRight >= 0 && w.left() - prevRight > lineHeight * 3) {
-                    result.add(seg.toString());
-                    seg.setLength(0);
+                if (prevRight >= 0 && w.left() - prevRight > charHeight * 3) {
+                    segments.add(toSegment(seg, charHeight));
+                    seg = new ArrayList<>();
                 }
-                // ภาษาไทยไม่เว้นวรรคระหว่างคำ แต่ Tesseract ตัดเป็นหลายกล่อง
-                // → เว้นวรรคเฉพาะเมื่อมีช่องว่างจริงในภาพ
-                if (!seg.isEmpty() && w.left() - prevRight > lineHeight * 0.3) seg.append(' ');
-                seg.append(w.text());
+                seg.add(w);
                 prevRight = w.left() + w.width();
             }
-            if (!seg.isEmpty()) result.add(seg.toString());
+            if (!seg.isEmpty()) segments.add(toSegment(seg, charHeight));
+        }
+
+        // Tesseract เรียงตาม "บล็อก" ไม่ใช่บนลงล่าง → เรียงใหม่ตามตำแหน่งแนวตั้ง
+        segments.sort(Comparator.comparingInt(Segment::bottom).thenComparingInt(Segment::left));
+        List<SlipTextParser.Line> result = new ArrayList<>();
+        for (Segment s : segments) {
+            result.add(new SlipTextParser.Line(s.text(), (double) s.left() / imageWidth));
         }
         return result;
+    }
+
+    private Segment toSegment(List<Word> words, int charHeight) {
+        StringBuilder text = new StringBuilder();
+        int prevRight = -1;
+        for (Word w : words) {
+            // ภาษาไทยไม่เว้นวรรคระหว่างคำ แต่ Tesseract ตัดเป็นหลายกล่อง
+            // → เว้นวรรคเฉพาะเมื่อมีช่องว่างจริงในภาพ
+            if (prevRight >= 0 && w.left() - prevRight > charHeight * 0.5) text.append(' ');
+            text.append(w.text());
+            prevRight = w.left() + w.width();
+        }
+        int bottom = median(words.stream().mapToInt(w -> w.top() + w.height()).toArray());
+        return new Segment(text.toString(), words.get(0).left(), bottom);
+    }
+
+    private static int median(int[] values) {
+        if (values.length == 0) return 20;
+        int[] v = values.clone();
+        java.util.Arrays.sort(v);
+        return v[v.length / 2];
     }
 
     private static boolean hasTrainedData(File dir) {
