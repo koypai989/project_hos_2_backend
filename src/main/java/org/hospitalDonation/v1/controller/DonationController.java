@@ -23,8 +23,6 @@ public class DonationController {
     public ResponseEntity<ResponseObject> saveDonation(@RequestBody CreateDonationDTO dto) {
         try {
             Donation donation = donationService.createDonation(dto);
-            // ไม่ส่ง entity กลับตรงๆ กัน lazy/ข้อมูล user รั่ว — ส่งข้อมูลการบริจาคแบบสรุป
-            // (ยอดเงิน/วันที่/เลขอ้างอิง/ปลายทาง/ใบเซอร์) ให้แอปแสดงผลในหน้าเดิมได้ทันที
             DonationResponseDTO result = DonationResponseDTO.from(donation);
             return new ResponseEntity<>(new ResponseObject(true, "บันทึกการบริจาคสำเร็จ", result), HttpStatus.CREATED);
         } catch (IllegalStateException e) {

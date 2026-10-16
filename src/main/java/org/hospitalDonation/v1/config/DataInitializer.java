@@ -1,39 +1,27 @@
 package org.hospitalDonation.v1.config;
 
 import lombok.RequiredArgsConstructor;
-import org.hospitalDonation.v1.entity.SystemAdmin;
-import org.hospitalDonation.v1.entity.User;
-import org.hospitalDonation.v1.repository.SystemAdminRepository;
+import org.hospitalDonation.v1.dtos.SystemAdminRegistrationDTO;
 import org.hospitalDonation.v1.repository.UserRepository;
+import org.hospitalDonation.v1.service.SystemAdminService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
+// สร้างบัญชีผู้ดูแลระบบกลางเริ่มต้น เมื่อยังไม่มีในฐานข้อมูล (เช่น ใช้ DB ใหม่)
+// สมัครผ่าน SystemAdminService เพื่อให้รหัสผ่านถูกเข้ารหัส (BCrypt) เหมือนการสมัครปกติ จึงล็อกอินได้ทันที
 @Component
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
     private final UserRepository userRepository;
-    private final SystemAdminRepository systemAdminRepository;
+    private final SystemAdminService systemAdminService;
 
     @Override
-    @Transactional
     public void run(String... args) throws Exception {
         String adminEmail = "admin@admin.com";
         if (userRepository.findByEmail(adminEmail).isEmpty()) {
-
-            User adminUser = User.builder()
-                    .email(adminEmail)
-                    .password("admin123")
-                    .role("ADMIN")
-                    .build();
-
-            User savedUser = userRepository.save(adminUser);
-            SystemAdmin adminProfile = SystemAdmin.builder()
-                    .fullName("คุณวันเสาร์")
-                    .user(savedUser)
-                    .build();
-
-            systemAdminRepository.save(adminProfile);
+            SystemAdminRegistrationDTO dto = new SystemAdminRegistrationDTO(
+                    adminEmail, "admin123", "ADMIN", "คุณวันเสาร์");
+            systemAdminService.registerSystemAdmin(dto);
 
             System.out.println(">> [Data Seeder] System Admin created successfully.");
         } else {

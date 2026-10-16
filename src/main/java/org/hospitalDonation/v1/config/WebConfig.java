@@ -23,7 +23,6 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/images/**")
                 .addResourceLocations("file:" + uploadPath);
 
-        // เสิร์ฟไฟล์ใบอนุโมทนาบัตรจากโฟลเดอร์ certificate (ข้างๆ uploads)
         String certPath = System.getProperty("user.dir") + "/certificate/";
         registry.addResourceHandler("/certificates/**")
                 .addResourceLocations("file:" + certPath);
